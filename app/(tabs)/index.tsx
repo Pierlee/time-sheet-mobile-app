@@ -1,8 +1,7 @@
+import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import React, { useState } from 'react';
-import { Text, View, Button, StyleSheet, Alert } from 'react-native';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
+import { Alert, Button, StyleSheet, Text, View } from 'react-native';
 import { db } from '../../constants/firebase';
-import QrClockIn from '../../components/ui/QrClockIn';
 
 
 export default function HomeScreen() {

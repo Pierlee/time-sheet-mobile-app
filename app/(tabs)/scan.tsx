@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, SafeAreaView } from 'react-native';
-import QrClockIn from '../../components/ui/QrClockIn';
+import { SafeAreaView } from 'react-native';
+import QrClockIn from '../../components/QrClockIn';
 
 export default function ScanScreen() {
   return (
