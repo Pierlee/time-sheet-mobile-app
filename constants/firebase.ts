@@ -1,18 +1,16 @@
 // constants/firebase.ts
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: "AIzaSyC_UjxuUBRjuDuafUuqLIFjjMsdCWlRkiw",
   authDomain: "payrollapp-164aa.firebaseapp.com",
+  databaseURL: "https://payrollapp-164aa-default-rtdb.firebaseio.com", // ✅ IMPORTANT for Realtime DB
   projectId: "payrollapp-164aa",
-  storageBucket: "payrollapp-164aa.appspot.com", // fixed typo in your `firebasestorage.app`
+  storageBucket: "payrollapp-164aa.appspot.com",
   messagingSenderId: "511463129327",
   appId: "1:511463129327:web:81d0d9364ad04fba3f5b1a"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
-// Export Firestore
-export const db = getFirestore(app);
+export const db = getDatabase(app); // ✅ Realtime DB
