@@ -37,6 +37,10 @@ export default function Home() {
         });
   
         Alert.alert('Success', `Clock-in sent for ${userId}`);
+                // Automatically navigate back after successful scan
+                setTimeout(() => {
+                  router.back();
+                }, 1000);
       } catch (err) {
         console.error('Error updating QR status:', err);
         Alert.alert('Error', 'Failed to update the QR code status.');
