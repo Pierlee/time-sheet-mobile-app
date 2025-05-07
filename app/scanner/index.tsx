@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Alert,
   Button,
+  View,
 } from "react-native";
 import { Overlay } from "./Overlay";
 import { useEffect, useRef } from "react";
@@ -60,7 +61,7 @@ export default function Home() {
   }, []);
 
   return (
-    <SafeAreaView style={StyleSheet.absoluteFillObject}>
+    <SafeAreaView style={styles.container}>
       <Stack.Screen
         options={{
           title: "Overview",
@@ -68,13 +69,36 @@ export default function Home() {
         }}
       />
       {Platform.OS === "android" ? <StatusBar hidden /> : null}
-      <Button title="Go Back" onPress={() => router.back()} />  {/* Back Button */}
-      <CameraView
-        style={StyleSheet.absoluteFillObject}
-        facing="back"
-        onBarcodeScanned={handleBarcodeScanned}
-      />
+      <View style={styles.cameraContainer}>
+        <CameraView
+          style={StyleSheet.absoluteFillObject}
+          facing="back"
+          onBarcodeScanned={handleBarcodeScanned}
+        />
+        <View style={styles.buttonContainer}>
+          <Button title="Go Back" onPress={() => router.replace("/")} />
+        </View>
+      </View>
       <Overlay />
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "black",
+  },
+  cameraContainer: {
+    flex: 1,
+    position: "relative",
+  },
+  buttonContainer: {
+    position: "absolute",
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    borderRadius: 5,
+  },
+});
