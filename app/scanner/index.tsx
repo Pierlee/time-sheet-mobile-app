@@ -8,13 +8,38 @@ import {
   SafeAreaView,
   StatusBar,
   StyleSheet,
+  Alert,
 } from "react-native";
 import { Overlay } from "./Overlay";
 import { useEffect, useRef } from "react";
+import { getDatabase, ref, update } from 'firebase/database';
+import { db } from '../../constants/firebase';
 
 export default function Home() {
   const qrLock = useRef(false);
   const appState = useRef(AppState.currentState);
+
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+    if (data && !qrLock.current) {
+      qrLock.current = true;
+      try {
+        const sessionId = data;
+        const userId = 'user123';
+        const sessionRef = ref(db, `qrSessions/${sessionId}`);
+  
+        await update(sessionRef, {
+          status: 'read',
+          userId,
+          timestamp: Date.now(),
+        });
+  
+        Alert.alert('Success', `Clock-in sent for ${userId}`);
+      } catch (err) {
+        console.error('Error updating QR status:', err);
+        Alert.alert('Error', 'Failed to update the QR code status.');
+      }
+    }
+  };
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -44,14 +69,7 @@ export default function Home() {
       <CameraView
         style={StyleSheet.absoluteFillObject}
         facing="back"
-        onBarcodeScanned={({ data }) => {
-          if (data && !qrLock.current) {
-            qrLock.current = true;
-            setTimeout(async () => {
-              await Linking.openURL(data);
-            }, 500);
-          }
-        }}
+        onBarcodeScanned={handleBarcodeScanned}
       />
       <Overlay />
     </SafeAreaView>
