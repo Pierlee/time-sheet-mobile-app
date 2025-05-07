@@ -1,4 +1,4 @@
-
+import { useRouter } from "expo-router";
 import { Camera, CameraView } from "expo-camera";
 import { Stack } from "expo-router";
 import {
@@ -9,6 +9,7 @@ import {
   StatusBar,
   StyleSheet,
   Alert,
+  Button,
 } from "react-native";
 import { Overlay } from "./Overlay";
 import { useEffect, useRef } from "react";
@@ -18,6 +19,7 @@ import { db } from '../../constants/firebase';
 export default function Home() {
   const qrLock = useRef(false);
   const appState = useRef(AppState.currentState);
+  const router = useRouter()
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
     if (data && !qrLock.current) {
@@ -66,6 +68,7 @@ export default function Home() {
         }}
       />
       {Platform.OS === "android" ? <StatusBar hidden /> : null}
+      <Button title="Go Back" onPress={() => router.back()} />  {/* Back Button */}
       <CameraView
         style={StyleSheet.absoluteFillObject}
         facing="back"
