@@ -1,33 +1,27 @@
-import { View, Text, StyleSheet, SafeAreaView, Pressable } from "react-native";
-import { Link, Stack } from "expo-router";
-
-import { useCameraPermissions } from "expo-camera";
+import { SafeAreaView, View, Text, StyleSheet, Pressable } from "react-native";
+import { Stack, router } from "expo-router";
 
 export default function Home() {
-  const [permission, requestPermission] = useCameraPermissions();
-
-  const isPermissionGranted = Boolean(permission?.granted);
-
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: "Overview", headerShown: false }} />
+      <Stack.Screen options={{ title: "Home", headerShown: false }} />
+
       <Text style={styles.title}>QR Code Scanner</Text>
-      <View style={{ gap: 20 }}>
-        <Pressable onPress={requestPermission}>
-          <Text style={styles.buttonStyle}>Request Permissions</Text>
+
+      <View style={styles.buttonGroup}>
+        <Pressable
+          style={styles.button}
+          onPress={() => router.push("/scanner")}
+        >
+          <Text style={styles.buttonText}>📷 Scan QR Code</Text>
         </Pressable>
-        <Link href={"./scanner"} asChild>
-          <Pressable disabled={!isPermissionGranted}>
-            <Text
-              style={[
-                styles.buttonStyle,
-                { opacity: !isPermissionGranted ? 0.5 : 1 },
-              ]}
-            >
-              Scan Code
-            </Text>
-          </Pressable>
-        </Link>
+
+        <Pressable
+          style={styles.button}
+          onPress={() => router.push("/scan-log")}
+        >
+          <Text style={styles.buttonText}>📋 View History</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -36,18 +30,30 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: "center",
     backgroundColor: "black",
-    justifyContent: "space-around",
-    paddingVertical: 80,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
   },
   title: {
+    fontSize: 32,
+    fontWeight: "bold",
     color: "white",
-    fontSize: 40,
+    marginBottom: 40,
   },
-  buttonStyle: {
-    color: "#0E7AFE",
-    fontSize: 20,
-    textAlign: "center",
+  buttonGroup: {
+    width: "100%",
+    gap: 20,
+  },
+  button: {
+    backgroundColor: "#0E7AFE",
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "white",
+    fontSize: 18,
   },
 });

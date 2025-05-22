@@ -1,53 +1,79 @@
 import { useRouter } from "expo-router";
-import { Camera, CameraView } from "expo-camera";
+import { CameraView } from "expo-camera";
 import { Stack } from "expo-router";
 import {
   AppState,
-  Linking,
   Platform,
   SafeAreaView,
   StatusBar,
   StyleSheet,
-  Alert,
   Button,
   View,
 } from "react-native";
 import { Overlay } from "./Overlay";
-import { useEffect, useRef } from "react";
-import { getDatabase, ref, update } from 'firebase/database';
-import { db } from '../../constants/firebase';
+import { useEffect, useRef, useState } from "react"; // ✅ Added useState here
+import { get, ref, update } from "firebase/database";
+import { db } from "../../constants/firebase";
 
-export default function Home() {
-  const qrLock = useRef(false);
+export default function Scanner() {
+  const qrLock = useRef(false); // ✅ Controls if scanning is allowed
   const appState = useRef(AppState.currentState);
-  const router = useRouter()
+  const router = useRouter();
+  const [scanned, setScanned] = useState(false); // ✅ Used to stop showing the camera after scan
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (data && !qrLock.current) {
+    // ✅ Prevent multiple scans by exiting early if locked
+    if (qrLock.current) return;
+
+    if (data) {
       qrLock.current = true;
+      setScanned(true); // ✅ Visually hide camera so user knows it's handled
+
       try {
         const sessionId = data;
-        const userId = 'user123';
+        const userId = "user123"; // Replace with actual user ID later
         const sessionRef = ref(db, `qrSessions/${sessionId}`);
-  
+        const snapshot = await get(sessionRef);
+
+        if (!snapshot.exists()) {
+          router.push({
+            pathname: "/scan-result" as const,
+            params: { status: "invalid", userId },
+          });
+          return;
+        }
+
+        const sessionData = snapshot.val();
+
+        if (sessionData.status === "read") {
+          router.push({
+            pathname: "/scan-result" as const,
+            params: { status: "used", userId },
+          });
+          return;
+        }
+
         await update(sessionRef, {
-          status: 'read',
+          status: "read",
           userId,
           timestamp: Date.now(),
         });
-  
-        Alert.alert('Success', `Clock-in sent for ${userId}`);
-                // Automatically navigate back after successful scan
-                setTimeout(() => {
-                  router.back();
-                }, 1000);
+
+        router.push({
+          pathname: "/scan-result" as const,
+          params: { status: "success", userId },
+        });
       } catch (err) {
-        console.error('Error updating QR status:', err);
-        Alert.alert('Error', 'Failed to update the QR code status.');
+        console.error("Error updating QR status:", err);
+        router.push({
+          pathname: "/scan-result" as const,
+          params: { status: "error", userId: "user123" },
+        });
       }
     }
   };
 
+  // ✅ Reset lock when app comes back to foreground
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (
@@ -55,6 +81,7 @@ export default function Home() {
         nextAppState === "active"
       ) {
         qrLock.current = false;
+        setScanned(false); // ✅ Also allow scanner to appear again
       }
       appState.current = nextAppState;
     });
@@ -68,17 +95,20 @@ export default function Home() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen
         options={{
-          title: "Overview",
+          title: "Scanner",
           headerShown: false,
         }}
       />
       {Platform.OS === "android" ? <StatusBar hidden /> : null}
       <View style={styles.cameraContainer}>
-        <CameraView
-          style={StyleSheet.absoluteFillObject}
-          facing="back"
-          onBarcodeScanned={handleBarcodeScanned}
-        />
+        {/* ✅ Only show camera if scanning hasn't happened */}
+        {!scanned && (
+          <CameraView
+            style={StyleSheet.absoluteFillObject}
+            facing="back"
+            onBarcodeScanned={handleBarcodeScanned}
+          />
+        )}
         <View style={styles.buttonContainer}>
           <Button title="Go Back" onPress={() => router.replace("/")} />
         </View>
