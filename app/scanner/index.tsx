@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Overlay } from "./Overlay";
 import { useEffect, useRef, useState } from "react"; // ✅ Added useState here
-import { get, ref, update } from "firebase/database";
+import { get, set, ref, update } from "firebase/database";
 import { db } from "../../constants/firebase";
 
 export default function Scanner() {
@@ -21,59 +21,56 @@ export default function Scanner() {
   const router = useRouter();
   const [scanned, setScanned] = useState(false); // ✅ Used to stop showing the camera after scan
 
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    // ✅ Prevent multiple scans by exiting early if locked
-    if (qrLock.current) return;
+const handleBarcodeScanned = async ({ data }: { data: string }) => {
+  if (qrLock.current || !data) return;
 
-    if (data) {
-      qrLock.current = true;
-      setScanned(true); // ✅ Visually hide camera so user knows it's handled
+  qrLock.current = true;
+  setScanned(true);
 
-      try {
-        const sessionId = data;
-        const userId = "user123"; // Replace with actual user ID later
-        const sessionRef = ref(db, `qrSessions/${sessionId}`);
-        const snapshot = await get(sessionRef);
+  try {
+    const sessionId = data;
+    const userId = "user123";
+    const now = Date.now();
 
-        if (!snapshot.exists()) {
-          router.push({
-            pathname: "/scan-result" as const,
-            params: { status: "invalid", userId },
-          });
-          return;
-        }
+    // 📅 Get date key like "2025-05-23"
+    const dateKey = new Date().toISOString().split("T")[0];
+    const timesheetRef = ref(db, `timesheets/${userId}/${dateKey}`);
+    const timesheetSnap = await get(timesheetRef);
 
-        const sessionData = snapshot.val();
+    if (!timesheetSnap.exists()) {
+      // ✅ First scan today
+      await set(timesheetRef, { clockIn: now });
+      alert(`Clock-in successful at ${new Date(now).toLocaleTimeString()}`);
+    } else {
+      const sheet = timesheetSnap.val();
 
-        if (sessionData.status === "read") {
-          router.push({
-            pathname: "/scan-result" as const,
-            params: { status: "used", userId },
-          });
-          return;
-        }
-
-        await update(sessionRef, {
-          status: "read",
-          userId,
-          timestamp: Date.now(),
-        });
-
-        router.push({
-          pathname: "/scan-result" as const,
-          params: { status: "success", userId },
-        });
-      } catch (err) {
-        console.error("Error updating QR status:", err);
-        router.push({
-          pathname: "/scan-result" as const,
-          params: { status: "error", userId: "user123" },
-        });
+      if (!sheet.clockOut) {
+        // ✅ Second scan today
+        await update(timesheetRef, { clockOut: now });
+        alert(`Clock-out successful at ${new Date(now).toLocaleTimeString()}`);
+      } else {
+        // ❌ Already completed
+        alert("You've already clocked in and out today.");
       }
     }
-  };
 
-  // ✅ Reset lock when app comes back to foreground
+    router.push({
+      pathname: "/scan-result",
+      params: { status: "success", userId },
+    });
+  } catch (err) {
+    console.error("Error handling scan:", err);
+    alert("Something went wrong.");
+    router.push({
+      pathname: "/scan-result",
+      params: { status: "error", userId: "user123" },
+    });
+  } finally {
+    qrLock.current = false;
+  }
+};
+
+  //Reset lock when app comes back to foreground
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (
@@ -101,7 +98,7 @@ export default function Scanner() {
       />
       {Platform.OS === "android" ? <StatusBar hidden /> : null}
       <View style={styles.cameraContainer}>
-        {/* ✅ Only show camera if scanning hasn't happened */}
+        {/* Only show camera if scanning hasn't happened */}
         {!scanned && (
           <CameraView
             style={StyleSheet.absoluteFillObject}

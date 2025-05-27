@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
   SectionList,
-  Pressable,
-  ActivityIndicator,
+  StyleSheet,
+  View,
 } from "react-native";
+import {
+  Text,
+  List,
+  ActivityIndicator,
+  Divider,
+  Card,
+} from "react-native-paper";
 import { Stack } from "expo-router";
 import { onValue, ref } from "firebase/database";
 import { db } from "../../constants/firebase";
@@ -28,69 +32,82 @@ export default function ScanLog() {
   const [expandedDates, setExpandedDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const sessionsRef = ref(db, "qrSessions");
+useEffect(() => {
+  const timesheetsRef = ref(db, "timesheets");
 
-    const unsubscribe = onValue(sessionsRef, (snapshot) => {
-      const data = snapshot.val();
-
-      if (!data) {
-        setSections([]);
-        setLoading(false);
-        return;
-      }
-
-      const sessions: Session[] = Object.entries(data)
-        .map(([id, value]: [string, any]) => ({
-          id,
-          userId: value.userId || "unknown",
-          status: value.status || "unknown",
-          timestamp: value.timestamp || 0,
-        }))
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      const grouped: { [key: string]: Session[] } = {};
-      sessions.forEach((session) => {
-        const dateKey = new Date(session.timestamp).toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-
-        if (!grouped[dateKey]) {
-          grouped[dateKey] = [];
-        }
-        grouped[dateKey].push(session);
-      });
-
-      const sectionList: Section[] = Object.entries(grouped)
-        .map(([title, data]) => ({ title, data }))
-        .sort((a, b) =>
-          new Date(b.data[0].timestamp).getTime() -
-          new Date(a.data[0].timestamp).getTime()
-        );
-
-      setSections(sectionList);
+  const unsubscribe = onValue(timesheetsRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) {
+      setSections([]);
       setLoading(false);
+      return;
+    }
+
+    const sessions: Session[] = [];
+
+    // Loop through users
+    Object.entries(data).forEach(([userId, dates]) => {
+      // Loop through each date
+      Object.entries(dates as Record<string, any>).forEach(([dateKey, times]) => {
+        if (times.clockIn) {
+          sessions.push({
+            id: `${userId}-${dateKey}-in`,
+            userId,
+            status: "clockIn",
+            timestamp: times.clockIn,
+          });
+        }
+
+        if (times.clockOut) {
+          sessions.push({
+            id: `${userId}-${dateKey}-out`,
+            userId,
+            status: "clockOut",
+            timestamp: times.clockOut,
+          });
+        }
+      });
     });
 
-    return () => unsubscribe();
-  }, []);
+    // Sort by time, newest first
+    sessions.sort((a, b) => b.timestamp - a.timestamp);
 
-  const getStatusEmoji = (status: string) => {
-    switch (status) {
-      case "success":
-        return "✅";
-      case "used":
-        return "⚠️";
-      case "invalid":
-        return "❌";
-      case "error":
-        return "🛑";
-      default:
-        return "🤔";
-    }
-  };
+    // Group by dateKey again for UI sectioning
+    const grouped: { [key: string]: Session[] } = {};
+    sessions.forEach((session) => {
+      const dateKey = new Date(session.timestamp).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      if (!grouped[dateKey]) grouped[dateKey] = [];
+      grouped[dateKey].push(session);
+    });
+
+    const sectionList: Section[] = Object.entries(grouped)
+      .map(([title, data]) => ({ title, data }))
+      .sort((a, b) => b.data[0].timestamp - a.data[0].timestamp);
+
+    setSections(sectionList);
+    setLoading(false);
+  });
+
+  return () => unsubscribe();
+}, []);
+
+
+const getStatusEmoji = (status: string) => {
+  switch (status) {
+    case "clockIn":
+      return "🟢";
+    case "clockOut":
+      return "🔴";
+    default:
+      return "🤔";
+  }
+};
+
 
   const toggleExpand = (date: string) => {
     setExpandedDates((prev) =>
@@ -108,34 +125,42 @@ export default function ScanLog() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: "Scan History" }} />
-      <Text style={styles.title}>📋 Scan Log</Text>
+      <Text variant="titleLarge" style={styles.title}>
+        📋 Scan Log
+      </Text>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#0E7AFE" />
-      ) : sections.length === 0 ? (
-        <Text style={styles.empty}>No scans found.</Text>
+        <ActivityIndicator animating color="#0E7AFE" size="large" />
       ) : (
         <SectionList
           sections={filteredSections}
           keyExtractor={(item) => item.id}
           renderSectionHeader={({ section }) => (
-            <Pressable onPress={() => toggleExpand(section.title)}>
-              <Text style={styles.sectionHeader}>
-                {expandedDates.includes(section.title) ? "🔽" : "▶️"} {section.title}
-              </Text>
-            </Pressable>
+            <>
+              <List.Accordion
+                title={section.title}
+                expanded={expandedDates.includes(section.title)}
+                onPress={() => toggleExpand(section.title)}
+                titleStyle={{ color: "#0E7AFE" }}
+                left={() => (
+                  <List.Icon icon={expandedDates.includes(section.title) ? "chevron-down" : "chevron-right"} />
+                )}
+              />
+              <Divider />
+            </>
           )}
           renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text style={styles.status}>
-                {getStatusEmoji(item.status)} {item.status.toUpperCase()}
-              </Text>
-              <Text style={styles.id}>ID: {item.id}</Text>
-              <Text>User: {item.userId}</Text>
-              <Text>
-                ⏱ {new Date(item.timestamp).toLocaleTimeString()}
-              </Text>
-            </View>
+            <Card style={styles.card}>
+              <Card.Title
+                title={`${getStatusEmoji(item.status)} ${item.status.toUpperCase()}`}
+                subtitle={`ID: ${item.id}`}
+                titleStyle={{ fontWeight: "bold" }}
+              />
+              <Card.Content>
+                <Text>User: {item.userId}</Text>
+                <Text>⏱ {new Date(item.timestamp).toLocaleTimeString()}</Text>
+              </Card.Content>
+            </Card>
           )}
         />
       )}
@@ -147,41 +172,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
-    paddingHorizontal: 20,
     paddingTop: 40,
+    paddingHorizontal: 10,
   },
   title: {
     color: "white",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    color: "#0E7AFE",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 20,
+    paddingHorizontal: 10,
     marginBottom: 10,
   },
   card: {
+    marginVertical: 8,
     backgroundColor: "#1a1a1a",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  id: {
-    color: "#0E7AFE",
-    marginBottom: 6,
-  },
-  status: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "white",
-    marginBottom: 6,
-  },
-  empty: {
-    color: "gray",
-    textAlign: "center",
-    marginTop: 40,
   },
 });
