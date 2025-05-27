@@ -15,6 +15,8 @@ import { Stack } from "expo-router";
 import { onValue, ref } from "firebase/database";
 import { db } from "../../constants/firebase";
 
+// Types
+
 type Session = {
   id: string;
   userId: string;
@@ -32,88 +34,68 @@ export default function ScanLog() {
   const [expandedDates, setExpandedDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  const timesheetsRef = ref(db, "timesheets");
+  useEffect(() => {
+    const timesheetsRef = ref(db, "timesheets");
 
-  const unsubscribe = onValue(timesheetsRef, (snapshot) => {
-    const data = snapshot.val();
-    if (!data) {
-      setSections([]);
+    const unsubscribe = onValue(timesheetsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        setSections([]);
+        setLoading(false);
+        return;
+      }
+
+      const sessions: Session[] = [];
+
+      Object.entries(data).forEach(([userId, dates]) => {
+        Object.entries(dates as Record<string, any>).forEach(([dateKey, times]) => {
+          if (times.clockIn) {
+            sessions.push({
+              id: `${userId}-${dateKey}-in`,
+              userId,
+              status: "clockIn",
+              timestamp: times.clockIn,
+            });
+          }
+          if (times.clockOut) {
+            sessions.push({
+              id: `${userId}-${dateKey}-out`,
+              userId,
+              status: "clockOut",
+              timestamp: times.clockOut,
+            });
+          }
+        });
+      });
+
+      sessions.sort((a, b) => b.timestamp - a.timestamp);
+
+      const grouped: { [key: string]: Session[] } = {};
+      sessions.forEach((session) => {
+        const dateKey = new Date(session.timestamp).toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+        if (!grouped[dateKey]) grouped[dateKey] = [];
+        grouped[dateKey].push(session);
+      });
+
+      const sectionList: Section[] = Object.entries(grouped)
+        .map(([title, data]) => ({ title, data }))
+        .sort((a, b) => b.data[0].timestamp - a.data[0].timestamp);
+
+      setSections(sectionList);
       setLoading(false);
-      return;
-    }
-
-    const sessions: Session[] = [];
-
-    // Loop through users
-    Object.entries(data).forEach(([userId, dates]) => {
-      // Loop through each date
-      Object.entries(dates as Record<string, any>).forEach(([dateKey, times]) => {
-        if (times.clockIn) {
-          sessions.push({
-            id: `${userId}-${dateKey}-in`,
-            userId,
-            status: "clockIn",
-            timestamp: times.clockIn,
-          });
-        }
-
-        if (times.clockOut) {
-          sessions.push({
-            id: `${userId}-${dateKey}-out`,
-            userId,
-            status: "clockOut",
-            timestamp: times.clockOut,
-          });
-        }
-      });
     });
 
-    // Sort by time, newest first
-    sessions.sort((a, b) => b.timestamp - a.timestamp);
-
-    // Group by dateKey again for UI sectioning
-    const grouped: { [key: string]: Session[] } = {};
-    sessions.forEach((session) => {
-      const dateKey = new Date(session.timestamp).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-
-      if (!grouped[dateKey]) grouped[dateKey] = [];
-      grouped[dateKey].push(session);
-    });
-
-    const sectionList: Section[] = Object.entries(grouped)
-      .map(([title, data]) => ({ title, data }))
-      .sort((a, b) => b.data[0].timestamp - a.data[0].timestamp);
-
-    setSections(sectionList);
-    setLoading(false);
-  });
-
-  return () => unsubscribe();
-}, []);
-
-
-const getStatusEmoji = (status: string) => {
-  switch (status) {
-    case "clockIn":
-      return "🟢";
-    case "clockOut":
-      return "🔴";
-    default:
-      return "🤔";
-  }
-};
-
+    return () => unsubscribe();
+  }, []);
 
   const toggleExpand = (date: string) => {
     setExpandedDates((prev) =>
-      prev.includes(date)
-        ? prev.filter((d) => d !== date)
-        : [...prev, date]
+      prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]
     );
   };
 
@@ -122,11 +104,22 @@ const getStatusEmoji = (status: string) => {
     data: expandedDates.includes(section.title) ? section.data : [],
   }));
 
+  const getStatusEmoji = (status: string) => {
+    switch (status) {
+      case "clockIn":
+        return "🟢";
+      case "clockOut":
+        return "🔴";
+      default:
+        return "🤔";
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: "Scan History" }} />
       <Text variant="titleLarge" style={styles.title}>
-        📋 Scan Log
+        Scan Log
       </Text>
 
       {loading ? (
@@ -135,20 +128,37 @@ const getStatusEmoji = (status: string) => {
         <SectionList
           sections={filteredSections}
           keyExtractor={(item) => item.id}
-          renderSectionHeader={({ section }) => (
-            <>
-              <List.Accordion
-                title={section.title}
-                expanded={expandedDates.includes(section.title)}
-                onPress={() => toggleExpand(section.title)}
-                titleStyle={{ color: "#0E7AFE" }}
-                left={() => (
-                  <List.Icon icon={expandedDates.includes(section.title) ? "chevron-down" : "chevron-right"} />
-                )}
-              />
-              <Divider />
-            </>
-          )}
+          renderSectionHeader={({ section }) => {
+            const clockIn = section.data.find((s) => s.status === "clockIn");
+            const clockOut = section.data.find((s) => s.status === "clockOut");
+
+            let duration = null;
+            if (clockIn && clockOut) {
+              const diffMs = clockOut.timestamp - clockIn.timestamp;
+              const hours = Math.floor(diffMs / (1000 * 60 * 60));
+              const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+              duration = `${hours}h ${minutes}m`;
+            }
+
+            return (
+              <>
+                <List.Accordion
+                  title={`${section.title}${duration ? ` • Worked ${duration}` : ""}`}
+                  expanded={expandedDates.includes(section.title)}
+                  onPress={() => toggleExpand(section.title)}
+                  titleStyle={{ color: "#0E7AFE" }}
+                  left={() => (
+                    <List.Icon
+                      icon={expandedDates.includes(section.title)
+                        ? "chevron-down"
+                        : "chevron-right"}
+                    />
+                  )}
+                />
+                <Divider />
+              </>
+            );
+          }}
           renderItem={({ item }) => (
             <Card style={styles.card}>
               <Card.Title
@@ -158,7 +168,12 @@ const getStatusEmoji = (status: string) => {
               />
               <Card.Content>
                 <Text>User: {item.userId}</Text>
-                <Text>⏱ {new Date(item.timestamp).toLocaleTimeString()}</Text>
+                <Text>
+                  ⏱ {new Date(item.timestamp).toLocaleTimeString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
               </Card.Content>
             </Card>
           )}
