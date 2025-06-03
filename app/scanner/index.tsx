@@ -11,66 +11,89 @@ import {
   View,
 } from "react-native";
 import { Overlay } from "./Overlay";
-import { useEffect, useRef, useState } from "react"; // ✅ Added useState here
+import { useEffect, useRef, useState } from "react";
 import { get, set, ref, update } from "firebase/database";
 import { db } from "../../constants/firebase";
 
 export default function Scanner() {
-  const qrLock = useRef(false); // ✅ Controls if scanning is allowed
+  const qrLock = useRef(false);
   const appState = useRef(AppState.currentState);
   const router = useRouter();
-  const [scanned, setScanned] = useState(false); // ✅ Used to stop showing the camera after scan
+  const [scanned, setScanned] = useState(false);
 
-const handleBarcodeScanned = async ({ data }: { data: string }) => {
-  if (qrLock.current || !data) return;
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+    if (qrLock.current || !data) return;
 
-  qrLock.current = true;
-  setScanned(true);
+    qrLock.current = true;
+    setScanned(true);
 
-  try {
-    const sessionId = data;
-    const userId = "user123";
-    const now = Date.now();
+    try {
+      const sessionId = data;
+      const userId = "user123";
+      const now = Date.now();
+      const sixHours = 6 * 60 * 60 * 1000;
 
-    // 📅 Get date key like "2025-05-23"
-    const dateKey = new Date().toISOString().split("T")[0];
-    const timesheetRef = ref(db, `timesheets/${userId}/${dateKey}`);
-    const timesheetSnap = await get(timesheetRef);
+      const dateKey = new Date().toISOString().split("T")[0];
+      const timesheetRef = ref(db, `timesheets/${userId}/${dateKey}`);
+      const timesheetSnap = await get(timesheetRef);
 
-    if (!timesheetSnap.exists()) {
-      // ✅ First scan today
-      await set(timesheetRef, { clockIn: now });
-      alert(`Clock-in successful at ${new Date(now).toLocaleTimeString()}`);
-    } else {
-      const sheet = timesheetSnap.val();
+      let newSessionType = "clockIn";
 
-      if (!sheet.clockOut) {
-        // ✅ Second scan today
-        await update(timesheetRef, { clockOut: now });
-        alert(`Clock-out successful at ${new Date(now).toLocaleTimeString()}`);
+      if (!timesheetSnap.exists()) {
+        // First entry of the day
+        await set(timesheetRef, {
+          sessions: [{ type: "clockIn", timestamp: now }],
+        });
+        alert(`Clock-in successful at ${new Date(now).toLocaleTimeString()}`);
+
+        
       } else {
-        // ❌ Already completed
-        alert("You've already clocked in and out today.");
+        const data = timesheetSnap.val();
+        const sessions = data.sessions || [];
+
+        const lastSession = sessions[sessions.length - 1];
+
+        if (lastSession?.type === "clockIn") {
+          // Last was clock-in, now clock-out
+          newSessionType = "clockOut";
+        } else if (lastSession?.type === "clockOut") {
+          // Last was clock-out, check time gap
+          const timeSinceLastOut = now - lastSession.timestamp;
+          if (timeSinceLastOut < sixHours) {
+            alert("You need to wait at least 6 hours before clocking in again.");
+            router.push({
+              pathname: "/scan-result",
+              params: { status: "error", userId },
+            });
+            return;
+          }
+          newSessionType = "clockIn";
+        }
+
+        const updatedSessions = [...sessions, { type: newSessionType, timestamp: now }];
+        await update(timesheetRef, { sessions: updatedSessions });
+
+        alert(
+          `${newSessionType === "clockIn" ? "Clock-in" : "Clock-out"} successful at ${new Date(now).toLocaleTimeString()}`
+        );
       }
+
+      router.push({
+        pathname: "/scan-result",
+        params: { status: "success", userId },
+      });
+    } catch (err) {
+      console.error("Error handling scan:", err);
+      alert("Something went wrong.");
+      router.push({
+        pathname: "/scan-result",
+        params: { status: "error", userId: "user123" },
+      });
+    } finally {
+      qrLock.current = false;
     }
+  };
 
-    router.push({
-      pathname: "/scan-result",
-      params: { status: "success", userId },
-    });
-  } catch (err) {
-    console.error("Error handling scan:", err);
-    alert("Something went wrong.");
-    router.push({
-      pathname: "/scan-result",
-      params: { status: "error", userId: "user123" },
-    });
-  } finally {
-    qrLock.current = false;
-  }
-};
-
-  //Reset lock when app comes back to foreground
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (
@@ -78,7 +101,7 @@ const handleBarcodeScanned = async ({ data }: { data: string }) => {
         nextAppState === "active"
       ) {
         qrLock.current = false;
-        setScanned(false); // ✅ Also allow scanner to appear again
+        setScanned(false);
       }
       appState.current = nextAppState;
     });
@@ -98,7 +121,6 @@ const handleBarcodeScanned = async ({ data }: { data: string }) => {
       />
       {Platform.OS === "android" ? <StatusBar hidden /> : null}
       <View style={styles.cameraContainer}>
-        {/* Only show camera if scanning hasn't happened */}
         {!scanned && (
           <CameraView
             style={StyleSheet.absoluteFillObject}

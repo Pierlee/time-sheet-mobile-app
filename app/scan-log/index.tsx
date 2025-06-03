@@ -48,24 +48,19 @@ export default function ScanLog() {
       const sessions: Session[] = [];
 
       Object.entries(data).forEach(([userId, dates]) => {
-        Object.entries(dates as Record<string, any>).forEach(([dateKey, times]) => {
-          if (times.clockIn) {
+        Object.entries(dates as Record<string, any>).forEach(([dateKey, dayData]) => {
+          const sessionList = dayData.sessions || [];
+
+          sessionList.forEach((s: any, index: number) => {
             sessions.push({
-              id: `${userId}-${dateKey}-in`,
+              id: `${userId}-${dateKey}-${index}`,
               userId,
-              status: "clockIn",
-              timestamp: times.clockIn,
+              status: s.type,
+              timestamp: s.timestamp,
             });
-          }
-          if (times.clockOut) {
-            sessions.push({
-              id: `${userId}-${dateKey}-out`,
-              userId,
-              status: "clockOut",
-              timestamp: times.clockOut,
-            });
-          }
+          });
         });
+
       });
 
       sessions.sort((a, b) => b.timestamp - a.timestamp);
