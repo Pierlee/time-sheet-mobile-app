@@ -1,4 +1,4 @@
-package com.anonymous.timesheet
+package com.clockin.app
 
 import android.app.Application
 import android.content.res.Configuration

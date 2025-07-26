@@ -10,13 +10,15 @@ import {
   ActivityIndicator,
   Divider,
   Card,
+  Button,
 } from "react-native-paper";
 import { Stack } from "expo-router";
 import { onValue, ref } from "firebase/database";
 import { db } from "../../constants/firebase";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 
 // Types
-
 type Session = {
   id: string;
   userId: string;
@@ -33,6 +35,7 @@ export default function ScanLog() {
   const [sections, setSections] = useState<Section[]>([]);
   const [expandedDates, setExpandedDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const timesheetsRef = ref(db, "timesheets");
@@ -48,30 +51,34 @@ export default function ScanLog() {
       const sessions: Session[] = [];
 
       Object.entries(data).forEach(([userId, dates]) => {
-        Object.entries(dates as Record<string, any>).forEach(([dateKey, dayData]) => {
-          const sessionList = dayData.sessions || [];
+        Object.entries(dates as Record<string, any>).forEach(
+          ([dateKey, dayData]) => {
+            const sessionList = dayData.sessions || [];
 
-          sessionList.forEach((s: any, index: number) => {
-            sessions.push({
-              id: `${userId}-${dateKey}-${index}`,
-              userId,
-              status: s.type,
-              timestamp: s.timestamp,
+            sessionList.forEach((s: any, index: number) => {
+              sessions.push({
+                id: `${userId}-${dateKey}-${index}`,
+                userId,
+                status: s.type,
+                timestamp: s.timestamp,
+              });
             });
-          });
-        });
-
+          }
+        );
       });
 
       sessions.sort((a, b) => b.timestamp - a.timestamp);
 
       const grouped: { [key: string]: Session[] } = {};
       sessions.forEach((session) => {
-        const dateKey = new Date(session.timestamp).toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
+        const dateKey = new Date(session.timestamp).toLocaleDateString(
+          undefined,
+          {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }
+        );
 
         if (!grouped[dateKey]) grouped[dateKey] = [];
         grouped[dateKey].push(session);
@@ -94,11 +101,6 @@ export default function ScanLog() {
     );
   };
 
-  const filteredSections = sections.map((section) => ({
-    title: section.title,
-    data: expandedDates.includes(section.title) ? section.data : [],
-  }));
-
   const getStatusEmoji = (status: string) => {
     switch (status) {
       case "clockIn":
@@ -110,6 +112,12 @@ export default function ScanLog() {
     }
   };
 
+  const handleExportCSV = async () => {
+    const csvRows = prepareCSVData(sections);
+    const csvString = generateCSV(csvRows);
+    await saveAndShareCSV(csvString);
+  };
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: "Scan History" }} />
@@ -117,11 +125,22 @@ export default function ScanLog() {
         Scan Log
       </Text>
 
+      <Button
+        mode="contained"
+        onPress={handleExportCSV}
+        style={{ margin: 10 }}
+      >
+        Export Timesheet (CSV)
+      </Button>
+
       {loading ? (
         <ActivityIndicator animating color="#0E7AFE" size="large" />
       ) : (
         <SectionList
-          sections={filteredSections}
+          sections={sections.map((section) => ({
+            title: section.title,
+            data: expandedDates.includes(section.title) ? section.data : [],
+          }))}
           keyExtractor={(item) => item.id}
           renderSectionHeader={({ section }) => {
             const clockIn = section.data.find((s) => s.status === "clockIn");
@@ -131,25 +150,33 @@ export default function ScanLog() {
             if (clockIn && clockOut) {
               const diffMs = clockOut.timestamp - clockIn.timestamp;
               const hours = Math.floor(diffMs / (1000 * 60 * 60));
-              const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+              const minutes = Math.floor(
+                (diffMs % (1000 * 60 * 60)) / (1000 * 60)
+              );
               duration = `${hours}h ${minutes}m`;
             }
 
             return (
               <>
                 <List.Accordion
-                  title={`${section.title}${duration ? ` • Worked ${duration}` : ""}`}
+                  title={`${section.title}${
+                    duration ? ` • Worked ${duration}` : ""
+                  }`}
                   expanded={expandedDates.includes(section.title)}
                   onPress={() => toggleExpand(section.title)}
                   titleStyle={{ color: "#0E7AFE" }}
                   left={() => (
                     <List.Icon
-                      icon={expandedDates.includes(section.title)
-                        ? "chevron-down"
-                        : "chevron-right"}
+                      icon={
+                        expandedDates.includes(section.title)
+                          ? "chevron-down"
+                          : "chevron-right"
+                      }
                     />
                   )}
-                />
+                >
+                  <View /> {/* FIX: to satisfy required children */}
+                </List.Accordion>
                 <Divider />
               </>
             );
@@ -164,7 +191,8 @@ export default function ScanLog() {
               <Card.Content>
                 <Text>User: {item.userId}</Text>
                 <Text>
-                  ⏱ {new Date(item.timestamp).toLocaleTimeString(undefined, {
+                  ⏱{" "}
+                  {new Date(item.timestamp).toLocaleTimeString(undefined, {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
@@ -177,6 +205,70 @@ export default function ScanLog() {
     </View>
   );
 }
+
+// 🔧 Helper functions
+
+const prepareCSVData = (
+  sections: Section[]
+): { date: string; clockIn?: string; clockOut?: string; duration?: string }[] => {
+  const rows: { date: string; clockIn?: string; clockOut?: string; duration?: string }[] = [];
+
+  sections.forEach((section) => {
+    const date = section.title;
+
+    const clockIn = section.data.find((s) => s.status === "clockIn");
+    const clockOut = section.data.find((s) => s.status === "clockOut");
+
+    const clockInTime = clockIn
+      ? new Date(clockIn.timestamp).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+
+    const clockOutTime = clockOut
+      ? new Date(clockOut.timestamp).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+
+    let duration = "";
+    if (clockIn && clockOut) {
+      const diffMs = clockOut.timestamp - clockIn.timestamp;
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      duration = `${hours}h ${minutes}m`;
+    }
+
+    rows.push({ date, clockIn: clockInTime, clockOut: clockOutTime, duration });
+  });
+
+  return rows;
+};
+
+const generateCSV = (
+  rows: { date: string; clockIn?: string; clockOut?: string; duration?: string }[]
+) => {
+  let csv = "Date,Clock In,Clock Out,Duration\n";
+
+  rows.forEach((row) => {
+    csv += `${row.date},${row.clockIn || ""},${row.clockOut || ""},${row.duration || ""}\n`;
+  });
+
+  return csv;
+};
+
+const saveAndShareCSV = async (csvString: string) => {
+  const fileUri = FileSystem.documentDirectory + "timesheet.csv";
+  await FileSystem.writeAsStringAsync(fileUri, csvString, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+
+  await Sharing.shareAsync(fileUri);
+};
+
+// 🔧 Styles
 
 const styles = StyleSheet.create({
   container: {

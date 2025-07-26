@@ -9,13 +9,16 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.clockin.app",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
@@ -23,7 +26,7 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.timesheet"
+      "package": "com.clockin.app"
     },
     "web": {
       "bundler": "metro",
@@ -32,6 +35,11 @@
     },
     "plugins": [
       "expo-router",
+      ["expo-build-properties", {
+        "ios": {
+          "useFrameworks": "static"
+        }
+      }],
       [
         "expo-splash-screen",
         {
@@ -41,6 +49,8 @@
           "backgroundColor": "#ffffff"
         }
       ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
       "expo-barcode-scanner",
       [
         "expo-camera",

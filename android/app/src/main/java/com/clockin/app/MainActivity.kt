@@ -1,4 +1,4 @@
-package com.anonymous.timesheet
+package com.clockin.app
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
