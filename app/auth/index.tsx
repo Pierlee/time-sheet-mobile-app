@@ -3,6 +3,7 @@ import { useState } from "react";
 import { View, StyleSheet, KeyboardAvoidingView } from "react-native";
 import { Button, Text, TextInput } from "react-native-paper";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 import { auth } from "../../firebase/firebase"; // adjust path if needed
 
 export default function Login() {
@@ -15,8 +16,9 @@ export default function Login() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.replace("/"); // redirect to home
-    } catch (error: any) {
-      alert("Login failed: " + error.message);
+    } catch (e: any) {
+      const err = e as FirebaseError
+      alert("Login failed: " + err.message);
     } finally {
       setLoading(false);
     }
