@@ -1,11 +1,23 @@
+import { useEffect } from "react";
 import { SafeAreaView, View, Text, StyleSheet, Pressable } from "react-native";
 import { Stack, router } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase/firebase"; // make sure this path is correct
 
 export default function Home() {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace("/auth"); // redirect to login
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ title: "Home", headerShown: false }} />
-
       <Text style={styles.title}>QR Code Scanner</Text>
 
       <View style={styles.buttonGroup}>
